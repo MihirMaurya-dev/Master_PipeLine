@@ -100,14 +100,12 @@ jobs:
           tflint_version: "latest"
 
       - name: "💰 Setup Infracost CLI"
-        if: ${{ secrets.INFRACOST_API_KEY != '' }}
         uses: infracost/actions/setup@v3
         with:
           api-key: ${{ secrets.INFRACOST_API_KEY }}
         continue-on-error: true
 
       - name: "🔑 Azure Authentication"
-        if: ${{ secrets.AZURE_CREDENTIALS != '' }}
         uses: azure/login@v2
         with:
           creds: ${{ secrets.AZURE_CREDENTIALS }}
@@ -174,19 +172,29 @@ jobs:
             }
 
       - name: "📊 Generate Infracost Breakdown"
-        if: ${{ secrets.INFRACOST_API_KEY != '' }}
-        run: infracost breakdown --path . --format json --out-file infracost.json
+        env:
+          INFRACOST_API_KEY: ${{ secrets.INFRACOST_API_KEY }}
+        run: |
+          if [ -n "$INFRACOST_API_KEY" ]; then
+            infracost breakdown --path . --format json --out-file infracost.json
+          else
+            echo "{}" > infracost.json
+          fi
         working-directory: ${{ matrix.tf_dir }}
         continue-on-error: true
 
       - name: "💬 Post Infracost FinOps Comment"
-        if: ${{ github.event_name == 'pull_request' && secrets.INFRACOST_API_KEY != '' }}
+        if: github.event_name == 'pull_request'
+        env:
+          INFRACOST_API_KEY: ${{ secrets.INFRACOST_API_KEY }}
         run: |
-          infracost comment github --repo $GITHUB_REPOSITORY \
-            --pull-request ${{ github.event.pull_request.number }} \
-            --path infracost.json \
-            --github-token ${{ secrets.GITHUB_TOKEN }} \
-            --behavior update \
-            --tag ${{ matrix.tf_dir }}
+          if [ -n "$INFRACOST_API_KEY" ]; then
+            infracost comment github --repo $GITHUB_REPOSITORY \
+              --pull-request ${{ github.event.pull_request.number }} \
+              --path infracost.json \
+              --github-token ${{ secrets.GITHUB_TOKEN }} \
+              --behavior update \
+              --tag ${{ matrix.tf_dir }}
+          fi
         working-directory: ${{ matrix.tf_dir }}
         continue-on-error: true
